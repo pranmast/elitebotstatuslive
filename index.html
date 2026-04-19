@@ -19,7 +19,7 @@
         
         async function pulse() {
             try {
-                const res = await fetch('data.json?nocache=' + Date.now());
+                const res = await fetch('https://raw.githubusercontent.com/pranmast/elitebotstatuslive/main/data.json?nocache=' + Date.now());
                 const data = await res.json();
                 document.getElementById('clock').innerText = "LAST DATA: " + data.last_update;
                 Object.keys(data.fleet).forEach(sym => {
