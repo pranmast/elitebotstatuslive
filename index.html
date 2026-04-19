@@ -2,7 +2,8 @@
 <html>
 <head>
     <title>v201.116 Live Terminal</title>
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Architecture Fix: Pinning strictly to v4.1.1 to prevent v5 API removal crashes -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         body { background: #08090b; color: #e1e1e1; font-family: 'Courier New', monospace; margin: 0; }
         .header { background: #14151a; padding: 10px; border-bottom: 1px solid #2b2f3a; text-align: center; }
@@ -80,3 +81,4 @@
     </script>
 </body>
 </html>
+
