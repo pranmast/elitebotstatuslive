@@ -14,42 +14,68 @@
 <body>
     <div class="header">🛰️ 10X MOMENTUM GUARDIAN | <span id="clock">SYNCING...</span></div>
     <div class="grid" id="container"></div>
+
     <script>
         const charts = {}; const series = {};
         
         async function pulse() {
             try {
+                // Fetch directly from Raw Github to bypass GH Pages build limits
                 const res = await fetch('https://raw.githubusercontent.com/pranmast/elitebotstatuslive/main/data.json?nocache=' + Date.now());
                 const data = await res.json();
                 document.getElementById('clock').innerText = "LAST DATA: " + data.last_update;
+
                 Object.keys(data.fleet).forEach(sym => {
-                    const asset = data.fleet[sym];
-                    if (!charts[sym]) setupChart(sym);
-                    
-                    series[sym].setData(asset.history);
-                    series[sym].setMarkers(asset.markers); // Renders the Buy/Sell Arrows
-                    
-                    const color = asset.roi > 0 ? '#00ff88' : (asset.roi < 0 ? '#ff4a4a' : '#fff');
-                    document.getElementById(`stats-${sym}`).innerHTML = 
-                        `POS: ${asset.position} | ROI: <span style="color:${color}">${asset.roi.toFixed(2)}%</span>`;
+                    try {
+                        const asset = data.fleet[sym];
+                        if (!charts[sym]) setupChart(sym);
+                        
+                        // Safety: TradingView will fatally crash if a marker time doesn't exist in the series data
+                        const validTimes = new Set(asset.history.map(d => d.time));
+                        let safeMarkers = asset.markers.filter(m => validTimes.has(m.time));
+                        // If exact match not found, just assign to the very last known data point to prevent crashes
+                        if (asset.markers.length > 0 && safeMarkers.length === 0 && asset.history.length > 0) {
+                            let snappedMarker = {...asset.markers[asset.markers.length-1]};
+                            snappedMarker.time = asset.history[asset.history.length-1].time;
+                            safeMarkers = [snappedMarker];
+                        }
+                        
+                        series[sym].setData(asset.history);
+                        series[sym].setMarkers(safeMarkers); // Safely render without fatal JS drops
+                        
+                        const color = asset.roi > 0 ? '#00ff88' : (asset.roi < 0 ? '#ff4a4a' : '#fff');
+                        document.getElementById(`stats-${sym.replace('/','')}`).innerHTML = 
+                            `POS: ${asset.position} | ROI: <span style="color:${color}">${asset.roi.toFixed(2)}%</span>`;
+                    } catch (err) {
+                        console.error(`Chart crash on ${sym}:`, err);
+                    }
                 });
-            } catch (e) {}
+            } catch (e) {
+                console.error("Network or JSON error:", e);
+            }
         }
+
         function setupChart(sym) {
             const div = document.createElement('div');
             div.className = 'card';
-            div.innerHTML = `<div style="padding:10px">${sym}</div><div id="c-${sym}"></div><div class="stats" id="stats-${sym}"></div>`;
+            const safeSym = sym.replace('/', '');
+            div.innerHTML = `<div style="padding:10px">${sym}</div><div id="c-${safeSym}"></div><div class="stats" id="stats-${safeSym}"></div>`;
             document.getElementById('container').appendChild(div);
-            charts[sym] = LightweightCharts.createChart(document.getElementById(`c-${sym}`), {
+
+            charts[sym] = LightweightCharts.createChart(document.getElementById(`c-${safeSym}`), {
                 width: document.getElementById('container').offsetWidth / 2 - 20,
                 height: 350,
-                layout: { backgroundColor: '#14151a', textColor: '#d1d4dc' },
-                grid: { vertLines: { color: '#23262f' }, horzLines: { color: '#23262f' } },
+                layout: { 
+                    background: { type: 'solid', color: '#14151a' }, // TV Version 4+ syntax
+                    textColor: '#d1d4dc' 
+                },
+                grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
                 timeScale: { timeVisible: true, secondsVisible: true }
             });
             series[sym] = charts[sym].addLineSeries({ color: '#2962FF', lineWidth: 2 });
         }
-        setInterval(pulse, 2000); // 2-second browser refresh to match
+
+        setInterval(pulse, 2000); // 2-second browser refresh to pick up fresh raw data pulls
     </script>
 </body>
 </html>
