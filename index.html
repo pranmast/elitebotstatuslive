@@ -109,7 +109,8 @@
                 delete charts[sym]; 
             }
         }
-        setInterval(pulse, 2000);
+        // Relaxed frontend loop to 30 seconds to completely kill console spam and edge cache lag
+        setInterval(pulse, 30000);
     </script>
 </body>
 </html>
