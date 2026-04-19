@@ -15,21 +15,17 @@
 <body>
     <div class="header">🛰️ 10X MOMENTUM GUARDIAN | <span id="clock">SYNCING...</span></div>
     <div class="grid" id="container"></div>
-
     <script>
         const charts = {}; 
         const series = {};
-
         // Helper: Replace all slashes to prevent ID breakages
         const safeId = (sym) => sym.replace(/\//g, '_');
-
         async function pulse() {
             try {
                 // Fetch directly from the silent Telemetry branch to bypass GH Pages build limits
                 const res = await fetch('https://raw.githubusercontent.com/pranmast/elitebotstatuslive/telemetry/data.json?nocache=' + Date.now());
                 const data = await res.json();
                 document.getElementById('clock').innerText = "LAST DATA: " + data.last_update;
-
                 Object.keys(data.fleet).forEach(sym => {
                     const asset = data.fleet[sym];
                     
@@ -38,24 +34,19 @@
                     if (!series[sym]) {
                         setupChart(sym);
                     }
-
                     // Safety Guard: Don't proceed if setup failed to create the series
                     if (!series[sym]) return;
-
                     try {
                         // Marker Logic: Snapping to valid times to prevent TV crashes
                         const validTimes = new Set(asset.history.map(d => d.time));
                         let safeMarkers = asset.markers.filter(m => validTimes.has(m.time));
-
                         if (asset.markers.length > 0 && safeMarkers.length === 0 && asset.history.length > 0) {
                             let snappedMarker = { ...asset.markers[asset.markers.length - 1] };
                             snappedMarker.time = asset.history[asset.history.length - 1].time;
                             safeMarkers = [snappedMarker];
                         }
-
                         series[sym].setData(asset.history);
                         series[sym].setMarkers(safeMarkers);
-
                         const color = asset.roi > 0 ? '#00ff88' : (asset.roi < 0 ? '#ff4a4a' : '#fff');
                         const statsEl = document.getElementById(`stats-${safeId(sym)}`);
                         if (statsEl) {
@@ -69,7 +60,6 @@
                 console.error("No Telemetry Connection:", e);
             }
         }
-
         function setupChart(sym) {
             const sId = safeId(sym);
             const container = document.getElementById('container');
@@ -90,17 +80,18 @@
             statsDiv.className = 'stats';
             statsDiv.id = `stats-${sId}`;
             statsDiv.innerText = 'WAITING...';
-
             card.appendChild(title);
             card.appendChild(chartDiv);
             card.appendChild(statsDiv);
             container.appendChild(card);
-
             // 2. Initialize Chart
             try {
                 charts[sym] = LightweightCharts.createChart(chartDiv, {
                     width: chartDiv.offsetWidth || (container.offsetWidth / 2 - 20),
                     height: 350,
+                    rightPriceScale: {
+                        mode: LightweightCharts.PriceScaleMode.Percentage,
+                    },
                     layout: {
                         background: { type: 'solid', color: '#14151a' },
                         textColor: '#d1d4dc'
@@ -108,11 +99,9 @@
                     grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
                     timeScale: { timeVisible: true, secondsVisible: true }
                 });
-
                 series[sym] = charts[sym].addLineSeries({ 
                     color: '#2962FF', 
-                    lineWidth: 2,
-                    priceFormat: { type: 'price', precision: 5, minMove: 0.00001 } 
+                    lineWidth: 2 
                 });
             } catch (e) {
                 console.error(`Chart Init Failed for ${sym}:`, e);
@@ -120,7 +109,6 @@
                 delete charts[sym]; 
             }
         }
-
         setInterval(pulse, 2000);
     </script>
 </body>
