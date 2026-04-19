@@ -2,7 +2,7 @@
 <html>
 <head>
     <title>v201.116 Live Terminal</title>
-    <!-- Architecture Fix: Pinning strictly to v4.1.1 to prevent v5 API removal crashes -->
+    <!-- CRITICAL: Pinned strictly to v4.1.1. Do NOT unpin or Version 5 update will delete addLineSeries() -->
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         body { background: #08090b; color: #e1e1e1; font-family: 'Courier New', monospace; margin: 0; }
@@ -17,8 +17,12 @@
     <div class="grid" id="container"></div>
 
     <script>
-        const charts = {}; const series = {};
-        
+        const charts = {}; 
+        const series = {};
+
+        // Helper: Replace all slashes to prevent ID breakages
+        const safeId = (sym) => sym.replace(/\//g, '_');
+
         async function pulse() {
             try {
                 // Fetch directly from the silent Telemetry branch to bypass GH Pages build limits
@@ -27,29 +31,38 @@
                 document.getElementById('clock').innerText = "LAST DATA: " + data.last_update;
 
                 Object.keys(data.fleet).forEach(sym => {
+                    const asset = data.fleet[sym];
+                    
+                    // CRITICAL FIX: Check for the SERIES, not the chart. 
+                    // This ensures we re-try setup if it failed partially last time.
+                    if (!series[sym]) {
+                        setupChart(sym);
+                    }
+
+                    // Safety Guard: Don't proceed if setup failed to create the series
+                    if (!series[sym]) return;
+
                     try {
-                        const asset = data.fleet[sym];
-                        if (!charts[sym]) setupChart(sym);
-                        
-                        // Safety: TradingView will fatally crash if a marker time doesn't exist in the series data
+                        // Marker Logic: Snapping to valid times to prevent TV crashes
                         const validTimes = new Set(asset.history.map(d => d.time));
                         let safeMarkers = asset.markers.filter(m => validTimes.has(m.time));
-                        
-                        // If exact match not found, snap to the very last known data point to prevent crashes
+
                         if (asset.markers.length > 0 && safeMarkers.length === 0 && asset.history.length > 0) {
-                            let snappedMarker = {...asset.markers[asset.markers.length-1]};
-                            snappedMarker.time = asset.history[asset.history.length-1].time;
+                            let snappedMarker = { ...asset.markers[asset.markers.length - 1] };
+                            snappedMarker.time = asset.history[asset.history.length - 1].time;
                             safeMarkers = [snappedMarker];
                         }
-                        
+
                         series[sym].setData(asset.history);
-                        series[sym].setMarkers(safeMarkers); // Safely render without fatal JS drops
-                        
+                        series[sym].setMarkers(safeMarkers);
+
                         const color = asset.roi > 0 ? '#00ff88' : (asset.roi < 0 ? '#ff4a4a' : '#fff');
-                        document.getElementById(`stats-${sym.replace('/','')}`).innerHTML = 
-                            `POS: ${asset.position} | ROI: <span style="color:${color}">${asset.roi.toFixed(2)}%</span>`;
+                        const statsEl = document.getElementById(`stats-${safeId(sym)}`);
+                        if (statsEl) {
+                            statsEl.innerHTML = `POS: ${asset.position} | ROI: <span style="color:${color}">${asset.roi.toFixed(2)}%</span>`;
+                        }
                     } catch (err) {
-                        console.error(`Chart crash on ${sym}:`, err);
+                        console.error(`Update fail on ${sym}:`, err);
                     }
                 });
             } catch (e) {
@@ -58,27 +71,57 @@
         }
 
         function setupChart(sym) {
-            const div = document.createElement('div');
-            div.className = 'card';
-            const safeSym = sym.replace('/', '');
-            div.innerHTML = `<div style="padding:10px">${sym}</div><div id="c-${safeSym}"></div><div class="stats" id="stats-${safeSym}"></div>`;
-            document.getElementById('container').appendChild(div);
+            const sId = safeId(sym);
+            const container = document.getElementById('container');
+            
+            // 1. Synchronous DOM creation (much more stable than innerHTML)
+            const card = document.createElement('div');
+            card.className = 'card';
+            
+            const title = document.createElement('div');
+            title.style.padding = '10px';
+            title.innerText = sym;
+            
+            const chartDiv = document.createElement('div');
+            chartDiv.id = `c-${sId}`;
+            chartDiv.style.height = '350px';
+            
+            const statsDiv = document.createElement('div');
+            statsDiv.className = 'stats';
+            statsDiv.id = `stats-${sId}`;
+            statsDiv.innerText = 'WAITING...';
 
-            charts[sym] = LightweightCharts.createChart(document.getElementById(`c-${safeSym}`), {
-                width: document.getElementById('container').offsetWidth / 2 - 20,
-                height: 350,
-                layout: { 
-                    background: { type: 'solid', color: '#14151a' }, // TV Version 4+ syntax
-                    textColor: '#d1d4dc' 
-                },
-                grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
-                timeScale: { timeVisible: true, secondsVisible: true }
-            });
-            series[sym] = charts[sym].addLineSeries({ color: '#2962FF', lineWidth: 2 });
+            card.appendChild(title);
+            card.appendChild(chartDiv);
+            card.appendChild(statsDiv);
+            container.appendChild(card);
+
+            // 2. Initialize Chart
+            try {
+                charts[sym] = LightweightCharts.createChart(chartDiv, {
+                    width: chartDiv.offsetWidth || (container.offsetWidth / 2 - 20),
+                    height: 350,
+                    layout: {
+                        background: { type: 'solid', color: '#14151a' },
+                        textColor: '#d1d4dc'
+                    },
+                    grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
+                    timeScale: { timeVisible: true, secondsVisible: true }
+                });
+
+                series[sym] = charts[sym].addLineSeries({ 
+                    color: '#2962FF', 
+                    lineWidth: 2,
+                    priceFormat: { type: 'price', precision: 5, minMove: 0.00001 } 
+                });
+            } catch (e) {
+                console.error(`Chart Init Failed for ${sym}:`, e);
+                // Delete key so we try again next pulse
+                delete charts[sym]; 
+            }
         }
 
-        setInterval(pulse, 2000); // 2-second browser refresh to pull raw CDN batch updates
+        setInterval(pulse, 2000);
     </script>
 </body>
 </html>
-
