@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>v201.116 Live Terminal</title>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        body { background: #08090b; color: #e1e1e1; font-family: 'Courier New', monospace; margin: 0; }
+        .header { background: #14151a; padding: 10px; border-bottom: 1px solid #2b2f3a; text-align: center; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; }
+        .card { background: #14151a; border: 1px solid #2b2f3a; border-radius: 4px; overflow: hidden; }
+        .stats { padding: 10px; font-weight: bold; border-top: 1px solid #2b2f3a; background: #1a1c23; }
+    </style>
+</head>
+<body>
+    <div class="header">🛰️ 10X MOMENTUM GUARDIAN | <span id="clock">SYNCING...</span></div>
+    <div class="grid" id="container"></div>
+    <script>
+        const charts = {}; const series = {};
+        
+        async function pulse() {
+            try {
+                const res = await fetch('data.json?nocache=' + Date.now());
+                const data = await res.json();
+                document.getElementById('clock').innerText = "LAST DATA: " + data.last_update;
+                Object.keys(data.fleet).forEach(sym => {
+                    const asset = data.fleet[sym];
+                    if (!charts[sym]) setupChart(sym);
+                    
+                    series[sym].setData(asset.history);
+                    series[sym].setMarkers(asset.markers); // Renders the Buy/Sell Arrows
+                    
+                    const color = asset.roi > 0 ? '#00ff88' : (asset.roi < 0 ? '#ff4a4a' : '#fff');
+                    document.getElementById(`stats-${sym}`).innerHTML = 
+                        `POS: ${asset.position} | ROI: <span style="color:${color}">${asset.roi.toFixed(2)}%</span>`;
+                });
+            } catch (e) {}
+        }
+        function setupChart(sym) {
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.innerHTML = `<div style="padding:10px">${sym}</div><div id="c-${sym}"></div><div class="stats" id="stats-${sym}"></div>`;
+            document.getElementById('container').appendChild(div);
+            charts[sym] = LightweightCharts.createChart(document.getElementById(`c-${sym}`), {
+                width: document.getElementById('container').offsetWidth / 2 - 20,
+                height: 350,
+                layout: { backgroundColor: '#14151a', textColor: '#d1d4dc' },
+                grid: { vertLines: { color: '#23262f' }, horzLines: { color: '#23262f' } },
+                timeScale: { timeVisible: true, secondsVisible: true }
+            });
+            series[sym] = charts[sym].addLineSeries({ color: '#2962FF', lineWidth: 2 });
+        }
+        setInterval(pulse, 2000); // 2-second browser refresh to match
+    </script>
+</body>
+</html>
