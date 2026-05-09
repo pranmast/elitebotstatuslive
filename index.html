@@ -27,8 +27,11 @@
         try {
 
             const res = await fetch(
-                'https://raw.githubusercontent.com/pranmast/elitebotstatuslive/telemetry/data.json?nocache=' + Date.now()
-            );
+                                  "https://elitebot-live.yourname.workers.dev?t=" + Date.now(),
+                                  {
+                                      cache: "no-store"
+                                  }
+                              )
 
             const data = await res.json();
 
@@ -46,33 +49,11 @@
 
                 if (!series[sym]) return;
 
-                // ===== BUILD SIMPLE HISTORY =====
-                // fallback if backend has no history
-                if (!window.priceHistory) {
-                    window.priceHistory = {};
+                if (asset.history && asset.history.length > 0) {
+
+                    series[sym].setData(asset.history);
+
                 }
-
-                if (!window.priceHistory[sym]) {
-                    window.priceHistory[sym] = [];
-                }
-
-                const now = Math.floor(Date.now() / 1000);
-
-                window.priceHistory[sym].push({
-                    time: now,
-                    value: asset.price
-                });
-
-                // Keep last 200 points
-                if (window.priceHistory[sym].length > 200) {
-                    window.priceHistory[sym].shift();
-                }
-
-                try {
-
-                    series[sym].setData(
-                        window.priceHistory[sym]
-                    );
 
                     const color =
                         asset.roi > 0
