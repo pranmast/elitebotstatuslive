@@ -17,113 +17,204 @@
     <div class="grid" id="container"></div>
 
     <script>
-        const charts = {}; 
-        const series = {};
+    const charts = {};
+    const series = {};
 
-        // Helper: Replace all slashes to prevent ID breakages
-        const safeId = (sym) => sym.replace(/\//g, '_');
+    const safeId = (sym) => sym.replace(/\//g, '_');
 
-        async function pulse() {
-            try {
-                // Fetch directly from the silent Telemetry branch to bypass GH Pages build limits
-                const res = await fetch('https://raw.githubusercontent.com/pranmast/elitebotstatuslive/telemetry/data.json?nocache=' + Date.now());
-                const data = await res.json();
-                document.getElementById('clock').innerText = "LAST DATA: " + data.last_update;
+    async function pulse() {
 
-                Object.keys(data.fleet).forEach(sym => {
-                    const asset = data.fleet[sym];
-                    
-                    // CRITICAL FIX: Check for the SERIES, not the chart. 
-                    // This ensures we re-try setup if it failed partially last time.
-                    if (!series[sym]) {
-                        setupChart(sym);
+        try {
+
+            const res = await fetch(
+                'https://raw.githubusercontent.com/pranmast/elitebotstatuslive/telemetry/data.json?nocache=' + Date.now()
+            );
+
+            const data = await res.json();
+
+            document.getElementById('clock').innerText =
+                "LAST DATA: " + data.last_update;
+
+            Object.keys(data.fleet).forEach(sym => {
+
+                const asset = data.fleet[sym];
+
+                // ===== CREATE CHART =====
+                if (!series[sym]) {
+                    setupChart(sym);
+                }
+
+                if (!series[sym]) return;
+
+                // ===== BUILD SIMPLE HISTORY =====
+                // fallback if backend has no history
+                if (!window.priceHistory) {
+                    window.priceHistory = {};
+                }
+
+                if (!window.priceHistory[sym]) {
+                    window.priceHistory[sym] = [];
+                }
+
+                const now = Math.floor(Date.now() / 1000);
+
+                window.priceHistory[sym].push({
+                    time: now,
+                    value: asset.price
+                });
+
+                // Keep last 200 points
+                if (window.priceHistory[sym].length > 200) {
+                    window.priceHistory[sym].shift();
+                }
+
+                try {
+
+                    series[sym].setData(
+                        window.priceHistory[sym]
+                    );
+
+                    const color =
+                        asset.roi > 0
+                        ? '#00ff88'
+                        : asset.roi < 0
+                        ? '#ff4a4a'
+                        : '#ffffff';
+
+                    const statsEl = document.getElementById(
+                        `stats-${safeId(sym)}`
+                    );
+
+                    if (statsEl) {
+
+                        statsEl.innerHTML =
+                            `
+                            POS: ${asset.position}
+                            |
+                            ROI:
+                            <span style="color:${color}">
+                                ${asset.roi.toFixed(2)}%
+                            </span>
+                            `;
                     }
 
-                    // Safety Guard: Don't proceed if setup failed to create the series
-                    if (!series[sym]) return;
+                } catch (err) {
 
-                    try {
-                        // Marker Logic: Snapping to valid times to prevent TV crashes
-                        const validTimes = new Set(asset.history.map(d => d.time));
-                        let safeMarkers = asset.markers.filter(m => validTimes.has(m.time));
+                    console.error(
+                        `Update fail on ${sym}:`,
+                        err
+                    );
+                }
+            });
 
-                        if (asset.markers.length > 0 && safeMarkers.length === 0 && asset.history.length > 0) {
-                            let snappedMarker = { ...asset.markers[asset.markers.length - 1] };
-                            snappedMarker.time = asset.history[asset.history.length - 1].time;
-                            safeMarkers = [snappedMarker];
+        } catch (e) {
+
+            console.error(
+                "No Telemetry Connection:",
+                e
+            );
+        }
+    }
+
+    function setupChart(sym) {
+
+        const sId = safeId(sym);
+
+        const container =
+            document.getElementById('container');
+
+        const card = document.createElement('div');
+
+        card.className = 'card';
+
+        const title = document.createElement('div');
+
+        title.style.padding = '10px';
+
+        title.innerText = sym;
+
+        const chartDiv = document.createElement('div');
+
+        chartDiv.id = `c-${sId}`;
+
+        chartDiv.style.height = '350px';
+
+        const statsDiv = document.createElement('div');
+
+        statsDiv.className = 'stats';
+
+        statsDiv.id = `stats-${sId}`;
+
+        statsDiv.innerText = 'WAITING...';
+
+        card.appendChild(title);
+
+        card.appendChild(chartDiv);
+
+        card.appendChild(statsDiv);
+
+        container.appendChild(card);
+
+        try {
+
+            charts[sym] =
+                LightweightCharts.createChart(
+                    chartDiv,
+                    {
+                        width:
+                            chartDiv.offsetWidth ||
+                            (container.offsetWidth / 2 - 20),
+
+                        height: 350,
+
+                        layout: {
+                            background: {
+                                type: 'solid',
+                                color: '#14151a'
+                            },
+
+                            textColor: '#d1d4dc'
+                        },
+
+                        grid: {
+                            vertLines: {
+                                color: '#2b2f3a'
+                            },
+
+                            horzLines: {
+                                color: '#2b2f3a'
+                            }
+                        },
+
+                        timeScale: {
+                            timeVisible: true,
+                            secondsVisible: true
                         }
-
-                        series[sym].setData(asset.history);
-                        series[sym].setMarkers(safeMarkers);
-
-                        const color = asset.roi > 0 ? '#00ff88' : (asset.roi < 0 ? '#ff4a4a' : '#fff');
-                        const statsEl = document.getElementById(`stats-${safeId(sym)}`);
-                        if (statsEl) {
-                            statsEl.innerHTML = `POS: ${asset.position} | ROI: <span style="color:${color}">${asset.roi.toFixed(2)}%</span>`;
-                        }
-                    } catch (err) {
-                        console.error(`Update fail on ${sym}:`, err);
                     }
+                );
+
+            series[sym] =
+                charts[sym].addLineSeries({
+
+                    color: '#2962FF',
+
+                    lineWidth: 2
                 });
-            } catch (e) {
-                console.error("No Telemetry Connection:", e);
-            }
+
+        } catch (e) {
+
+            console.error(
+                `Chart Init Failed for ${sym}:`,
+                e
+            );
+
+            delete charts[sym];
         }
+    }
 
-        function setupChart(sym) {
-            const sId = safeId(sym);
-            const container = document.getElementById('container');
-            
-            // 1. Synchronous DOM creation (much more stable than innerHTML)
-            const card = document.createElement('div');
-            card.className = 'card';
-            
-            const title = document.createElement('div');
-            title.style.padding = '10px';
-            title.innerText = sym;
-            
-            const chartDiv = document.createElement('div');
-            chartDiv.id = `c-${sId}`;
-            chartDiv.style.height = '350px';
-            
-            const statsDiv = document.createElement('div');
-            statsDiv.className = 'stats';
-            statsDiv.id = `stats-${sId}`;
-            statsDiv.innerText = 'WAITING...';
+    setInterval(pulse, 2000);
 
-            card.appendChild(title);
-            card.appendChild(chartDiv);
-            card.appendChild(statsDiv);
-            container.appendChild(card);
-
-            // 2. Initialize Chart
-            try {
-                charts[sym] = LightweightCharts.createChart(chartDiv, {
-                    width: chartDiv.offsetWidth || (container.offsetWidth / 2 - 20),
-                    height: 350,
-                    rightPriceScale: {
-                        mode: LightweightCharts.PriceScaleMode.Percentage,
-                    },
-                    layout: {
-                        background: { type: 'solid', color: '#14151a' },
-                        textColor: '#d1d4dc'
-                    },
-                    grid: { vertLines: { color: '#2b2f3a' }, horzLines: { color: '#2b2f3a' } },
-                    timeScale: { timeVisible: true, secondsVisible: true }
-                });
-
-                series[sym] = charts[sym].addLineSeries({ 
-                    color: '#2962FF', 
-                    lineWidth: 2 
-                });
-            } catch (e) {
-                console.error(`Chart Init Failed for ${sym}:`, e);
-                // Delete key so we try again next pulse
-                delete charts[sym]; 
-            }
-        }
-
-        setInterval(pulse, 2000);
-    </script>
+    pulse();
+</script>
 </body>
 </html>
