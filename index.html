@@ -27,7 +27,7 @@
         try {
 
             const res = await fetch(
-                                  "https://elitebot-live.yourname.workers.dev?t=" + Date.now(),
+                                  "https://elitebot-live.pranmast.workers.dev?t=" + Date.now(),
                                   {
                                       cache: "no-store"
                                   }
@@ -38,46 +38,50 @@
             document.getElementById('clock').innerText =
                 "LAST DATA: " + data.last_update;
 
-            Object.keys(data.fleet).forEach(sym => {
+Object.keys(data.fleet).forEach(sym => {
 
-                const asset = data.fleet[sym];
+    const asset = data.fleet[sym];
 
-                // ===== CREATE CHART =====
-                if (!series[sym]) {
-                    setupChart(sym);
-                }
+    // ===== CREATE CHART =====
+    if (!series[sym]) {
+        setupChart(sym);
+    }
 
-                if (!series[sym]) return;
+    if (!series[sym]) return;
 
-                if (asset.history && asset.history.length > 0) {
+    // ===== REAL HISTORY FROM BACKEND =====
+    if (asset.history && asset.history.length > 0) {
 
-                    series[sym].setData(asset.history);
+        series[sym].setData(asset.history);
 
-                }
+    }
 
-                    const color =
-                        asset.roi > 0
-                        ? '#00ff88'
-                        : asset.roi < 0
-                        ? '#ff4a4a'
-                        : '#ffffff';
+    // ===== ROI COLOR =====
+    const color =
+        asset.roi > 0
+        ? '#00ff88'
+        : asset.roi < 0
+        ? '#ff4a4a'
+        : '#ffffff';
 
-                    const statsEl = document.getElementById(
-                        `stats-${safeId(sym)}`
-                    );
+    // ===== STATS =====
+    const statsEl = document.getElementById(
+        `stats-${safeId(sym)}`
+    );
 
-                    if (statsEl) {
+    if (statsEl) {
 
-                        statsEl.innerHTML =
-                            `
-                            POS: ${asset.position}
-                            |
-                            ROI:
-                            <span style="color:${color}">
-                                ${asset.roi.toFixed(2)}%
-                            </span>
-                            `;
-                    }
+        statsEl.innerHTML =
+            `
+            POS: ${asset.position}
+            |
+            ROI:
+            <span style="color:${color}">
+                ${asset.roi.toFixed(2)}%
+            </span>
+            `;
+    }
+});
 
                 } catch (err) {
 
